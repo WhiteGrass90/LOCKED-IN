@@ -13,9 +13,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script>
-      // Polyfill for process.env to prevent ReferenceError in browser
-      window.process = { env: { API_KEY: '' } };
-      
       tailwind.config = {
         theme: {
           extend: {
@@ -69,30 +66,16 @@
         background: #3f3f46; 
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^1.37.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3"
-  }
-}
-</script>
 </head>
   <body>
     <div id="root"></div>
-    
-    <!-- This is the crucial link that starts the React app -->
     <script type="module" src="/index.tsx"></script>
-
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
             .then(registration => {
-              console.log('ServiceWorker registration successful with scope: ', registration.scope);
+              console.log('ServiceWorker registration successful');
             })
             .catch(err => {
               console.log('ServiceWorker registration failed: ', err);
