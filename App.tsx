@@ -1,17 +1,18 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { AppState, FocusSession } from './types';
 import { getMotivationalMessage, getInterventionMessage, getCompletionMessage } from './services/geminiService';
 import Timer from './components/Timer';
 import GrainOverlay from './components/GrainOverlay';
 import HoldToQuitButton from './components/HoldToQuitButton';
 import StreakGrid from './components/StreakGrid';
-import { Play, Pause, RefreshCw, Check, X } from 'lucide-react';
+import { AlertCircle, Check, ArrowRight, Lock, Camera } from 'lucide-react';
 
-// Icons using lucide-react (simulated import, assume environment has it or use SVGs directly if preferred)
-const AlertIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>;
-const CheckIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>;
-const ArrowRightIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>;
-const LockIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>;
+// Icons
+const AlertIcon = () => <AlertCircle className="w-5 h-5" />;
+const CheckIcon = () => <Check className="w-6 h-6" />;
+const ArrowRightIcon = () => <ArrowRight className="w-5 h-5" />;
+const LockIcon = () => <Lock className="w-6 h-6" />;
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>(AppState.SETUP);
@@ -21,11 +22,68 @@ export default function App() {
   });
   const [coachMessage, setCoachMessage] = useState<string>("");
   const [loadingMessage, setLoadingMessage] = useState<boolean>(false);
+  const [shamePhoto, setShamePhoto] = useState<string | null>(null);
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Setup initial message
   useEffect(() => {
     // Optional: could fetch an initial greeting
   }, []);
+
+  // Handle Shame Camera Logic
+  useEffect(() => {
+    if (appState === AppState.SHAME && !shamePhoto) {
+      const startCamera = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'user' } 
+          });
+          
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.play();
+            
+            // Wait a bit for auto-exposure then snap
+            setTimeout(() => {
+              snapPhoto(stream);
+            }, 1500);
+          }
+        } catch (err) {
+          console.error("Camera denied or error:", err);
+          // Fallback if camera fails
+          setShamePhoto("camera_denied"); 
+        }
+      };
+      
+      startCamera();
+    }
+  }, [appState, shamePhoto]);
+
+  const snapPhoto = (stream: MediaStream) => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        // Mirror the image to feel more like a selfie
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const dataUrl = canvas.toDataURL('image/png');
+        setShamePhoto(dataUrl);
+        
+        // Stop all tracks
+        stream.getTracks().forEach(track => track.stop());
+      }
+    }
+  };
 
   const startSession = async () => {
     setLoadingMessage(true);
@@ -38,7 +96,6 @@ export default function App() {
   const triggerIntervention = async () => {
     setAppState(AppState.INTERVENTION);
     setLoadingMessage(true);
-    // Use the existing intent for a personalized check
     const msg = await getInterventionMessage(session.intent);
     setCoachMessage(msg);
     setLoadingMessage(false);
@@ -49,15 +106,19 @@ export default function App() {
       setAppState(AppState.FOCUSING);
       setCoachMessage("good choice. stay locked in.");
     } else {
-      setAppState(AppState.SETUP);
-      setCoachMessage("resetting. try again when you're ready.");
+      handleForfeit();
     }
+  };
+
+  const handleForfeit = () => {
+    setCoachMessage("capturing failure...");
+    setShamePhoto(null);
+    setAppState(AppState.SHAME);
   };
 
   const handleComplete = async () => {
     setAppState(AppState.COMPLETED);
     
-    // Save to history
     try {
       const today = new Date().toISOString().split('T')[0];
       const history = JSON.parse(localStorage.getItem('lockIn_history') || '[]');
@@ -79,22 +140,29 @@ export default function App() {
     setAppState(AppState.SETUP);
     setSession({ intent: "Quit Instagram", durationMinutes: 45 });
     setCoachMessage("");
+    setShamePhoto(null);
   };
 
   return (
-    <div className={`min-h-screen font-sans selection:bg-red-900 selection:text-white flex flex-col relative overflow-hidden transition-colors duration-1000 ${appState === AppState.INTERVENTION ? 'bg-black' : 'bg-vibe-dark text-zinc-100'}`}>
+    <div className={`min-h-screen font-sans selection:bg-red-900 selection:text-white flex flex-col relative overflow-hidden transition-colors duration-1000 ${appState === AppState.INTERVENTION || appState === AppState.SHAME ? 'bg-black' : 'bg-vibe-dark text-zinc-100'}`}>
       <GrainOverlay />
       
+      {/* Hidden Capture Elements */}
+      <video ref={videoRef} className="hidden" playsInline muted autoPlay />
+      <canvas ref={canvasRef} className="hidden" />
+
       {/* Dynamic Backgrounds */}
       {appState === AppState.INTERVENTION ? (
         <>
-          {/* Red Siren Background */}
           <div className="absolute inset-0 bg-red-900/30 animate-siren pointer-events-none z-0" />
           <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(220,38,38,0.5)] z-0 pointer-events-none" />
         </>
+      ) : appState === AppState.SHAME ? (
+        <>
+          <div className="absolute inset-0 bg-black z-0" />
+        </>
       ) : (
         <>
-          {/* Default Vibe Background */}
           <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-vibe-purple/10 rounded-full blur-[120px] pointer-events-none animate-pulse-slow" />
           <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-blue-900/10 rounded-full blur-[100px] pointer-events-none" />
         </>
@@ -102,10 +170,10 @@ export default function App() {
 
       {/* Header */}
       <header className="w-full p-6 flex justify-between items-center z-10 opacity-70">
-        <div className={`text-sm font-mono tracking-widest uppercase ${appState === AppState.INTERVENTION ? 'text-red-500' : 'text-zinc-500'}`}>
+        <div className={`text-sm font-mono tracking-widest uppercase ${appState === AppState.INTERVENTION || appState === AppState.SHAME ? 'text-red-500' : 'text-zinc-500'}`}>
           Lock In /// Protocol
         </div>
-        <div className={`w-2 h-2 rounded-full shadow-[0_0_8px] ${appState === AppState.INTERVENTION ? 'bg-red-600 shadow-red-500' : 'bg-green-500 shadow-green-500'}`}></div>
+        <div className={`w-2 h-2 rounded-full shadow-[0_0_8px] ${appState === AppState.INTERVENTION || appState === AppState.SHAME ? 'bg-red-600 shadow-red-500' : 'bg-green-500 shadow-green-500'}`}></div>
       </header>
 
       {/* Main Content */}
@@ -162,14 +230,13 @@ export default function App() {
               </button>
             </div>
             
-            {/* Faded Streak Grid */}
             <div className="mt-8 flex justify-center w-full">
               <StreakGrid />
             </div>
           </div>
         )}
 
-        {/* Active Session (Focusing) */}
+        {/* Active Session */}
         {appState === AppState.FOCUSING && (
            <div className="flex flex-col items-center w-full gap-8 md:gap-12 animate-[fadeIn_0.5s_ease-out]">
              <div className="h-24 flex items-center justify-center text-center w-full max-w-lg">
@@ -202,25 +269,20 @@ export default function App() {
            </div>
         )}
 
-        {/* Intervention State (Red Siren Mode) */}
+        {/* Intervention State */}
         {appState === AppState.INTERVENTION && (
           <div className="absolute inset-0 z-50 flex flex-col items-center justify-center p-6 text-center space-y-12 animate-[fadeIn_0.2s_ease-out] w-full max-w-md mx-auto">
-            
             <div className="space-y-6">
                <div className="w-20 h-20 rounded-full bg-red-950/50 border border-red-800/50 flex items-center justify-center mx-auto shadow-[0_0_30px_rgba(220,38,38,0.3)] animate-bounce">
                   <LockIcon />
                </div>
-               
-               {/* Single Message Displayed Above Button */}
                <h2 className="text-2xl md:text-3xl font-bold text-red-100 leading-tight tracking-tight drop-shadow-md">
                  {coachMessage || "remember why you started."}
                </h2>
-               
                <p className="text-red-300/60 text-sm font-mono uppercase tracking-widest">
                   Lockdown Protocol Active
                </p>
             </div>
-            
             <div className="flex flex-col gap-4 w-full pt-4">
               <button 
                 onClick={() => resolveIntervention(true)}
@@ -228,13 +290,53 @@ export default function App() {
               >
                 I'M STAYING
               </button>
-              
               <div className="pt-4 w-full">
                   <HoldToQuitButton 
                     onQuit={() => resolveIntervention(false)} 
                   />
               </div>
             </div>
+          </div>
+        )}
+
+        {/* SHAME State */}
+        {appState === AppState.SHAME && (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center p-6 bg-black animate-[fadeIn_0.1s_ease-out]">
+            {!shamePhoto ? (
+              <div className="flex flex-col items-center justify-center gap-4">
+                 <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+                 <p className="text-red-600 font-mono tracking-widest animate-pulse">CAPTURING FAILURE...</p>
+              </div>
+            ) : shamePhoto === "camera_denied" ? (
+               <div className="flex flex-col items-center justify-center gap-6">
+                 <h1 className="text-7xl font-black text-red-600 tracking-tighter">COWARD</h1>
+                 <p className="text-zinc-500 font-mono text-center">You hid from the camera.<br/>But you know what you did.</p>
+                 <button onClick={handleReset} className="mt-8 text-zinc-400 hover:text-white underline underline-offset-4">
+                   Accept & Reset
+                 </button>
+               </div>
+            ) : (
+              <div className="relative flex flex-col items-center animate-[zoomIn_0.2s_cubic-bezier(0.175,0.885,0.32,1.275)]">
+                <div className="relative border-8 border-white bg-white pb-12 shadow-[0_0_50px_rgba(255,0,0,0.5)] transform rotate-2">
+                  <img src={shamePhoto} alt="Forfeit" className="w-[300px] h-[300px] object-cover grayscale contrast-125" />
+                  <div className="absolute bottom-2 left-0 right-0 text-center">
+                    <p className="text-black font-mono text-xs tracking-widest opacity-50">{new Date().toLocaleDateString()}</p>
+                  </div>
+                  <div className="absolute inset-0 flex items-center justify-center mix-blend-hard-light pointer-events-none">
+                     <h1 className="text-8xl font-black text-red-600 tracking-tighter transform -rotate-12 border-4 border-red-600 px-4 py-2 rounded-lg opacity-80">
+                       LOSER
+                     </h1>
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={handleReset}
+                  className="mt-12 bg-zinc-900 text-zinc-400 px-6 py-3 rounded-full hover:bg-zinc-800 hover:text-white transition-colors border border-zinc-800"
+                >
+                  Start Over
+                </button>
+              </div>
+            )}
           </div>
         )}
 
