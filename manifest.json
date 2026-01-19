@@ -1,21 +1,22 @@
 {
   "name": "Lock In",
   "short_name": "Lock In",
-  "start_url": ".",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#09090b",
   "theme_color": "#09090b",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "https://esm.sh/lucide-static/icons/lock.svg",
+      "src": "https://placehold.co/192x192/09090b/e4e4e7.png?text=Lock+In",
       "sizes": "192x192",
-      "type": "image/svg+xml"
+      "type": "image/png"
     },
     {
-      "src": "https://esm.sh/lucide-static/icons/lock.svg",
+      "src": "https://placehold.co/512x512/09090b/e4e4e7.png?text=Lock+In",
       "sizes": "512x512",
-      "type": "image/svg+xml"
+      "type": "image/png"
     }
   ]
 }
